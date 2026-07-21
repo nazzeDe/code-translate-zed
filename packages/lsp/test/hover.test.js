@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { TextDocument } from "vscode-languageserver-textdocument";
 
-import { createHoverProvider } from "../src/hover.js";
+import { createHoverProvider, splitIdentifier } from "../src/hover.js";
 
 function createDocument(text) {
   return TextDocument.create(
@@ -18,31 +18,29 @@ function createProvider(lookup) {
   return createHoverProvider({ lookup });
 }
 
-test("complete identifiers include digits, underscores, and hyphens", async () => {
-  const texts = ["hello1", "hello_world", "hello-world"];
+test("single-word identifiers with digits produce a hover", async () => {
+  const provideHover = createProvider(async (identifier) =>
+    identifier === "hello1" ? { translation: "translation" } : null,
+  );
+  const hover = await provideHover(createDocument("hello1"), {
+    line: 0,
+    character: 1,
+  });
 
-  for (const text of texts) {
-    const provideHover = createProvider(async (identifier) =>
-      identifier === text ? { translation: "translation" } : null,
-    );
-    const hover = await provideHover(createDocument(text), {
-      line: 0,
-      character: 1,
-    });
-
-    assert.equal(hover.contents.value, `**${text}**: translation`);
-    assert.deepEqual(hover.range, {
-      start: { line: 0, character: 0 },
-      end: { line: 0, character: text.length },
-    });
-  }
+  assert.equal(hover.contents.value, "**hello1**: translation");
+  assert.deepEqual(hover.range, {
+    start: { line: 0, character: 0 },
+    end: { line: 0, character: 6 },
+  });
 });
 
-test("beginning, middle, and last positions return the complete identifier range", async () => {
+test("compound identifiers split and look up each word, preserving original UTF-16 range", async () => {
   const document = createDocument('"hello_1-world",');
-  const provideHover = createProvider(async (identifier) =>
-    identifier === "hello_1-world" ? { translation: "translation" } : null,
-  );
+  const provideHover = createProvider(async (identifier) => {
+    if (identifier === "hello") return { translation: "你好" };
+    if (identifier === "world") return { translation: "世界" };
+    return null;
+  });
   const positions = [1, 8, 13];
 
   const hovers = await Promise.all(
@@ -51,17 +49,16 @@ test("beginning, middle, and last positions return the complete identifier range
     ),
   );
 
-  const expectedHover = {
-    contents: {
-      kind: "markdown",
-      value: "**hello_1-world**: translation",
-    },
-    range: {
-      start: { line: 0, character: 1 },
-      end: { line: 0, character: 14 },
-    },
+  const expectedValue = "**hello**: 你好\n\n**world**: 世界";
+  const expectedRange = {
+    start: { line: 0, character: 1 },
+    end: { line: 0, character: 14 },
   };
-  assert.deepEqual(hovers, [expectedHover, expectedHover, expectedHover]);
+
+  for (const hover of hovers) {
+    assert.equal(hover.contents.value, expectedValue);
+    assert.deepEqual(hover.range, expectedRange);
+  }
 });
 
 test("positions on surrounding quotes and punctuation return null", async () => {
@@ -78,4 +75,44 @@ test("positions on surrounding quotes and punctuation return null", async () => 
   );
 
   assert.deepEqual(hovers, [null, null, null, null]);
+});
+
+test("splitIdentifier splits camelCase", () => {
+  assert.deepEqual(splitIdentifier("getUserName"), ["get", "user", "name"]);
+});
+
+test("splitIdentifier splits PascalCase with all-caps prefix", () => {
+  assert.deepEqual(splitIdentifier("HTTPServer"), ["http", "server"]);
+});
+
+test("splitIdentifier splits snake_case", () => {
+  assert.deepEqual(splitIdentifier("foo_bar"), ["foo", "bar"]);
+});
+
+test("splitIdentifier splits kebab-case", () => {
+  assert.deepEqual(splitIdentifier("foo-bar"), ["foo", "bar"]);
+});
+
+test("splitIdentifier handles all-uppercase as single word", () => {
+  assert.deepEqual(splitIdentifier("HTTP"), ["http"]);
+});
+
+test("splitIdentifier returns single lowercase character", () => {
+  assert.deepEqual(splitIdentifier("a"), ["a"]);
+});
+
+test("splitIdentifier returns empty array for pure number", () => {
+  assert.deepEqual(splitIdentifier("123"), []);
+});
+
+test("splitIdentifier returns empty for non-English", () => {
+  assert.deepEqual(splitIdentifier("über"), []);
+});
+
+test("splitIdentifier deduplicates while preserving first occurrence order", () => {
+  assert.deepEqual(splitIdentifier("foo_foo_bar"), ["foo", "bar"]);
+});
+
+test("splitIdentifier handles mixed case acronym followed by lowercase", () => {
+  assert.deepEqual(splitIdentifier("getUserID"), ["get", "user", "id"]);
 });
