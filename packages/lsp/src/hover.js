@@ -1,4 +1,5 @@
 import { MarkupKind } from "vscode-languageserver/node.js";
+import { URL } from "node:url";
 
 /**
  * Split a compound identifier into lowercase words.
@@ -44,9 +45,12 @@ export function splitIdentifier(text) {
     } else if (
       i > 0 &&
       i + 1 < text.length &&
-      c >= "A" && c <= "Z" &&
-      text[i - 1] >= "A" && text[i - 1] <= "Z" &&
-      text[i + 1] >= "a" && text[i + 1] <= "z"
+      c >= "A" &&
+      c <= "Z" &&
+      text[i - 1] >= "A" &&
+      text[i - 1] <= "Z" &&
+      text[i + 1] >= "a" &&
+      text[i + 1] <= "z"
     ) {
       // ALL-CAPS prefix followed by PascalCase: HTTP Server
       addWord(current);
@@ -109,7 +113,7 @@ function identifierAtPosition(document, position) {
   return { text: text.slice(start, end), start, end };
 }
 
-const MARKDOWN_ESCAPE_RE = /[\\`*_{}\[\]()#+.!|~-]/g;
+const MARKDOWN_ESCAPE_RE = /[!-/:-@[-`{-~]/g;
 
 /**
  * Escape text for safe inclusion in Markdown content.
@@ -121,6 +125,22 @@ function escapeMarkdown(text) {
   return text.replace(MARKDOWN_ESCAPE_RE, "\\$&");
 }
 
+function escapeMarkdownBlock(text) {
+  return text
+    .split(/\\n|\r?\n/)
+    .map(escapeMarkdown)
+    .join("  \n");
+}
+
+function googleTranslateUrl(word) {
+  const url = new URL("https://translate.google.com/");
+  url.searchParams.set("sl", "en");
+  url.searchParams.set("tl", "zh-CN");
+  url.searchParams.set("text", word);
+  url.searchParams.set("op", "translate");
+  return url.href;
+}
+
 /**
  * Render a hover value for the matched results.
  *
@@ -130,11 +150,10 @@ function escapeMarkdown(text) {
  * @param {{ word: string, entry: object }[]} results
  * @returns {string}
  */
-function renderHoverValue(results) {
+export function renderHoverMarkdown(results) {
   const blocks = results.map(({ word, entry }) => {
     const escapedWord = escapeMarkdown(word);
-    const encodedWord = encodeURIComponent(word);
-    const gtLink = `https://translate.google.com/?sl=en&tl=zh-CN&text=${encodedWord}&op=translate`;
+    const gtLink = googleTranslateUrl(word);
 
     let line = `[**${escapedWord}**](${gtLink})`;
 
@@ -143,7 +162,7 @@ function renderHoverValue(results) {
     }
 
     if (entry.translation) {
-      line += `\n${escapeMarkdown(entry.translation)}`;
+      line += `  \n${escapeMarkdownBlock(entry.translation)}`;
     }
 
     return line;
@@ -176,7 +195,7 @@ export function createHoverProvider(store) {
       return null;
     }
 
-    const value = renderHoverValue(results);
+    const value = renderHoverMarkdown(results);
 
     return {
       contents: {

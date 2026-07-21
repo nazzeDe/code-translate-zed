@@ -8,7 +8,7 @@ Copyright (c) 2026 nazzeDe. New implementation code in this repository is licens
 
 ## Original Code Translate VS Code plugin
 
-The original plugin is available for inspection at `/tmp/code-translate-vscode-inspect` and is published at <https://github.com/w88975/code-translate-vscode>. Its `LICENSE` and README identify the original copyright holder as w88975 and describe the project as MIT licensed.
+The original plugin is published at <https://github.com/w88975/code-translate-vscode>. Its upstream [LICENSE](https://github.com/w88975/code-translate-vscode/blob/master/LICENSE) and [README](https://github.com/w88975/code-translate-vscode/blob/master/README.md) identify the original copyright holder as w88975 and describe the project as MIT licensed.
 
 The original notice is retained here:
 

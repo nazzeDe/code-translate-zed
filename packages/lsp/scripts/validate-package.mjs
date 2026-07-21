@@ -43,6 +43,10 @@ const packOutput = await run(npmCommand(), ["pack", "--dry-run", "--json"], {
 });
 const metadata = getPackageMetadata(packOutput);
 assertPackage(metadata?.files, "npm pack did not return a file manifest");
+assertPackage(
+  metadata.name === packageName,
+  `npm pack returned package ${metadata.name}; expected ${packageName}`,
+);
 
 const files = metadata.files.map(({ path }) => path.replaceAll("\\", "/"));
 const fileSet = new Set(files);
@@ -51,8 +55,20 @@ const dictionaryFiles = files.filter((path) =>
 );
 
 assertPackage(
+  fileSet.has("package.json"),
+  "npm package is missing package.json",
+);
+assertPackage(
   fileSet.has("dist/server.js"),
   "npm package is missing dist/server.js",
+);
+assertPackage(
+  fileSet.has("dist/dictionary.js"),
+  "npm package is missing dist/dictionary.js",
+);
+assertPackage(
+  fileSet.has("dist/hover.js"),
+  "npm package is missing dist/hover.js",
 );
 assertPackage(
   dictionaryFiles.length === 674,

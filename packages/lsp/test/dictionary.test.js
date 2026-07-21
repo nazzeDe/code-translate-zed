@@ -1,12 +1,16 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import test from "node:test";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { createDictionaryStore } from "../src/dictionary.js";
 
-test("createDictionaryStore lookups a word from a prefix file", async (t) => {
+const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+test("createDictionaryStore looks up a word from a prefix file", async (t) => {
   const dir = await mkdtemp(join(tmpdir(), "dict-test-"));
   try {
     await writeFile(
@@ -44,7 +48,7 @@ test("createDictionaryStore lookups a word from a prefix file", async (t) => {
     });
 
     await t.test("missing word returns null", async () => {
-      const result = await store.lookup("nonexistent");
+      const result = await store.lookup("hero");
       assert.equal(result, null);
     });
   } finally {
@@ -74,12 +78,23 @@ test("non-ASCII prefix returns null without touching fs", async () => {
   assert.equal(await store.lookup("éclair"), null);
 });
 
+test("cache capacity must be a positive safe integer", () => {
+  for (const maxSize of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.throws(
+      () => createDictionaryStore("/unused", { maxSize }),
+      /maxSize must be a positive safe integer/,
+    );
+  }
+});
+
 test("lazy loading: prefix file not read until first lookup, read only once", async () => {
   const calls = [];
-  const store = createDictionaryStore("/dummy", {
+  const dictDir = "dummy";
+  const testFile = join(dictDir, "te.json");
+  const store = createDictionaryStore(dictDir, {
     readFile: async (path) => {
       calls.push(path);
-      if (path === "/dummy/te.json") {
+      if (path === testFile) {
         return JSON.stringify({ test: "测试" });
       }
       throw new Error(`unexpected path: ${path}`);
@@ -102,13 +117,17 @@ test("lazy loading: prefix file not read until first lookup, read only once", as
 
 test("LRU eviction: evicted prefix is reloaded from reader on next access", async () => {
   const calls = [];
+  const dictDir = "d";
+  const aaFile = join(dictDir, "aa.json");
+  const bbFile = join(dictDir, "bb.json");
+  const ccFile = join(dictDir, "cc.json");
   const data = {
-    "/d/aa.json": JSON.stringify({ aaword: "aa翻译" }),
-    "/d/bb.json": JSON.stringify({ bbword: "bb翻译" }),
-    "/d/cc.json": JSON.stringify({ ccword: "cc翻译" }),
+    [aaFile]: JSON.stringify({ aaword: "aa翻译" }),
+    [bbFile]: JSON.stringify({ bbword: "bb翻译" }),
+    [ccFile]: JSON.stringify({ ccword: "cc翻译" }),
   };
 
-  const store = createDictionaryStore("/d", {
+  const store = createDictionaryStore(dictDir, {
     maxSize: 2,
     readFile: async (path) => {
       calls.push(path);
@@ -120,7 +139,7 @@ test("LRU eviction: evicted prefix is reloaded from reader on next access", asyn
   // Load aa and bb.
   await store.lookup("aaword");
   await store.lookup("bbword");
-  assert.deepEqual(calls, ["/d/aa.json", "/d/bb.json"]);
+  assert.deepEqual(calls, [aaFile, bbFile]);
 
   // Access aa again so bb becomes LRU.
   await store.lookup("aaword");
@@ -128,27 +147,28 @@ test("LRU eviction: evicted prefix is reloaded from reader on next access", asyn
 
   // Load cc — evicts bb (least recently used).
   await store.lookup("ccword");
-  assert.deepEqual(calls, ["/d/aa.json", "/d/bb.json", "/d/cc.json"]);
+  assert.deepEqual(calls, [aaFile, bbFile, ccFile]);
 
   // bb should reload from reader (was evicted).
   await store.lookup("bbword");
-  assert.deepEqual(calls, [
-    "/d/aa.json",
-    "/d/bb.json",
-    "/d/cc.json",
-    "/d/bb.json",
-  ], "evicted bb should be reloaded");
+  assert.deepEqual(
+    calls,
+    [aaFile, bbFile, ccFile, bbFile],
+    "evicted bb should be reloaded",
+  );
 });
 
 test("cache capacity respects maxSize", async () => {
-  // Create a store with maxSize=1 and verify only 1 entry stays cached.
   const calls = [];
-  const store = createDictionaryStore("/d", {
+  const dictDir = "d";
+  const aaFile = join(dictDir, "aa.json");
+  const bbFile = join(dictDir, "bb.json");
+  const store = createDictionaryStore(dictDir, {
     maxSize: 1,
     readFile: async (path) => {
       calls.push(path);
-      if (path === "/d/aa.json") return JSON.stringify({ aaword: "aa" });
-      if (path === "/d/bb.json") return JSON.stringify({ bbword: "bb" });
+      if (path === aaFile) return JSON.stringify({ aaword: "aa" });
+      if (path === bbFile) return JSON.stringify({ bbword: "bb" });
       throw new Error(`unexpected: ${path}`);
     },
   });
@@ -173,6 +193,7 @@ test("missing file (ENOENT) returns null and is not cached", async () => {
       err.code = "ENOENT";
       throw err;
     },
+    onLoadError: () => {},
   });
 
   // First attempt: null, reader called.
@@ -191,6 +212,7 @@ test("invalid JSON returns null and is not cached", async () => {
       calls.push(path);
       return "not valid json {{{";
     },
+    onLoadError: () => {},
   });
 
   assert.equal(await store.lookup("hello"), null);
@@ -209,6 +231,7 @@ test("filesystem error returns null and is not cached", async () => {
       err.code = "EACCES";
       throw err;
     },
+    onLoadError: () => {},
   });
 
   assert.equal(await store.lookup("hello"), null);
@@ -216,4 +239,82 @@ test("filesystem error returns null and is not cached", async () => {
 
   assert.equal(await store.lookup("hello"), null);
   assert.equal(calls.length, 2, "fs errors should not be cached");
+});
+
+test("failed loads report prefix context without caching the failure", async () => {
+  const diagnostics = [];
+  const failure = Object.assign(new Error("permission denied"), {
+    code: "EACCES",
+  });
+  const store = createDictionaryStore("/d", {
+    readFile: async () => {
+      throw failure;
+    },
+    onLoadError: (diagnostic) => diagnostics.push(diagnostic),
+  });
+
+  assert.equal(await store.lookup("hello"), null);
+  assert.equal(await store.lookup("help"), null);
+  assert.deepEqual(diagnostics, [
+    { prefix: "he", error: failure },
+    { prefix: "he", error: failure },
+  ]);
+});
+
+test("default load diagnostics use stderr without writing to stdout", () => {
+  const dictionaryModule = pathToFileURL(
+    join(packageRoot, "src", "dictionary.js"),
+  ).href;
+  const program = `
+    import { createDictionaryStore } from ${JSON.stringify(dictionaryModule)};
+    const store = createDictionaryStore("/d", {
+      readFile: async () => {
+        throw Object.assign(new Error("permission denied"), { code: "EACCES" });
+      },
+    });
+    await store.lookup("hello");
+  `;
+  const result = spawnSync(
+    process.execPath,
+    ["--input-type=module", "--eval", program],
+    { encoding: "utf8" },
+  );
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stdout, "");
+  assert.match(
+    result.stderr,
+    /Failed to load dictionary he\.json \[EACCES\]: permission denied/,
+  );
+});
+
+test("translation-less and malformed entries are dictionary misses", async () => {
+  const store = createDictionaryStore("/d", {
+    readFile: async () =>
+      JSON.stringify({
+        abnull: null,
+        abmissing: { w: "ABMissing", t: null },
+        abnumber: { t: 42 },
+      }),
+  });
+
+  assert.equal(await store.lookup("abnull"), null);
+  assert.equal(await store.lookup("abmissing"), null);
+  assert.equal(await store.lookup("abnumber"), null);
+});
+
+test("packaged dictionary normalizes entries and escaped line breaks", async () => {
+  const store = createDictionaryStore(join(packageRoot, "dict"));
+
+  assert.deepEqual(await store.lookup("hello"), {
+    translation: "interj. 喂, 嘿",
+    phonetic: "hә'lәu",
+  });
+
+  const abandon = await store.lookup("abandon");
+  assert.ok(abandon.translation.includes("\n"));
+  assert.ok(!abandon.translation.includes("\\n"));
+
+  assert.equal(await store.lookup("absconce"), null);
+  assert.equal(await store.lookup("adamatic"), null);
 });

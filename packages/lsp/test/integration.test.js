@@ -116,7 +116,7 @@ function createProtocolClient(server) {
   };
 }
 
-test("built stdio server returns a UTF-16 hover range", async () => {
+test("built stdio server handles initialization and Hover edge cases", async (t) => {
   await execFileAsync(process.execPath, ["scripts/build.mjs"], {
     cwd: packageRoot,
   });
@@ -134,10 +134,12 @@ test("built stdio server returns a UTF-16 hover range", async () => {
       capabilities: {},
     });
 
-    assert.equal(initialize.jsonrpc, "2.0");
-    assert.equal(initialize.id, 1);
-    assert.equal(initialize.result.capabilities.textDocumentSync, 2);
-    assert.equal(initialize.result.capabilities.hoverProvider, true);
+    await t.test("initialize advertises incremental Hover support", () => {
+      assert.equal(initialize.jsonrpc, "2.0");
+      assert.equal(initialize.id, 1);
+      assert.equal(initialize.result.capabilities.textDocumentSync, 2);
+      assert.equal(initialize.result.capabilities.hoverProvider, true);
+    });
 
     client.notify("initialized", {});
     const uri = "file:///workspace/example.txt";
@@ -150,35 +152,74 @@ test("built stdio server returns a UTF-16 hover range", async () => {
       },
     });
 
-    const knownHover = await client.request(2, "textDocument/hover", {
-      textDocument: { uri },
-      position: { line: 0, character: 6 },
-    });
+    await t.test(
+      "known token returns Markdown and its UTF-16 range",
+      async () => {
+        const knownHover = await client.request(2, "textDocument/hover", {
+          textDocument: { uri },
+          position: { line: 0, character: 6 },
+        });
 
-    assert.equal(knownHover.result.contents.kind, "markdown");
-    assert.ok(
-      knownHover.result.contents.value.includes("[**hello**](https://translate.google.com/"),
+        assert.equal(knownHover.result.contents.kind, "markdown");
+        assert.ok(
+          knownHover.result.contents.value.includes(
+            "[**hello**](https://translate.google.com/",
+          ),
+        );
+        assert.ok(
+          knownHover.result.contents.value.includes("interj") &&
+            knownHover.result.contents.value.includes("喂\\, 嘿"),
+        );
+        assert.deepEqual(knownHover.result.range, {
+          start: { line: 0, character: 4 },
+          end: { line: 0, character: 9 },
+        });
+      },
     );
-    assert.ok(
-      knownHover.result.contents.value.includes("interj") &&
-        knownHover.result.contents.value.includes("喂, 嘿"),
+
+    await t.test("unopened document returns null", async () => {
+      const unopenedHover = await client.request(3, "textDocument/hover", {
+        textDocument: { uri: "file:///workspace/unopened.txt" },
+        position: { line: 0, character: 1 },
+      });
+      assert.equal(unopenedHover.result, null);
+    });
+
+    await t.test("position outside a token returns null", async () => {
+      const emptyPositionHover = await client.request(4, "textDocument/hover", {
+        textDocument: { uri },
+        position: { line: 0, character: 9 },
+      });
+      assert.equal(emptyPositionHover.result, null);
+    });
+
+    await t.test(
+      "incremental changes update the tracked document",
+      async () => {
+        client.notify("textDocument/didChange", {
+          textDocument: { uri, version: 2 },
+          contentChanges: [
+            {
+              range: {
+                start: { line: 0, character: 4 },
+                end: { line: 0, character: 9 },
+              },
+              text: "world",
+            },
+          ],
+        });
+
+        const changedHover = await client.request(5, "textDocument/hover", {
+          textDocument: { uri },
+          position: { line: 0, character: 6 },
+        });
+        assert.ok(changedHover.result.contents.value.includes("text=world"));
+        assert.deepEqual(changedHover.result.range, {
+          start: { line: 0, character: 4 },
+          end: { line: 0, character: 9 },
+        });
+      },
     );
-    assert.deepEqual(knownHover.result.range, {
-      start: { line: 0, character: 4 },
-      end: { line: 0, character: 9 },
-    });
-
-    const unopenedHover = await client.request(3, "textDocument/hover", {
-      textDocument: { uri: "file:///workspace/unopened.txt" },
-      position: { line: 0, character: 1 },
-    });
-    assert.equal(unopenedHover.result, null);
-
-    const emptyPositionHover = await client.request(4, "textDocument/hover", {
-      textDocument: { uri },
-      position: { line: 0, character: 9 },
-    });
-    assert.equal(emptyPositionHover.result, null);
   } finally {
     server.kill();
   }

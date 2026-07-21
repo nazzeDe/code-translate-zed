@@ -95,7 +95,7 @@ To test without writing to real Zed data, set `ZED_EXTENSION_WORK_DIR` to the ex
 
 ```sh
 ZED_EXTENSION_WORK_DIR="$(mktemp -d)" npm run bootstrap
-npm run bootstrap -- --work-dir /tmp/code-translate-zed-work
+npm run bootstrap -- --work-dir "$(mktemp -d)"
 ```
 
 On PowerShell:

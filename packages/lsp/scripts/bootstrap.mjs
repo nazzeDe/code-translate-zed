@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { mkdtemp, mkdir, readFile, readdir, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { dirname, join, win32 } from "node:path";
+import { dirname, join, posix, win32 } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const NPM_PACKAGE = "code-translate-lsp";
@@ -11,7 +11,7 @@ export const WORK_DIR_ENV = "ZED_EXTENSION_WORK_DIR";
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 function pathForPlatform(platform) {
-  return platform === "win32" ? win32 : { join };
+  return platform === "win32" ? win32 : posix;
 }
 
 export function getZedExtensionWorkDirectory({
