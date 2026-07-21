@@ -1,0 +1,19 @@
+{
+  "name": "code-translate-lsp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Offline identifier translation Language Server for Zed",
+  "license": "MIT",
+  "main": "out/server.js",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test",
+    "lint": "eslint .",
+    "format": "prettier --check ."
+  },
+  "devDependencies": {
+    "eslint": "^9.39.5",
+    "prettier": "^3.7.4"
+  }
+}

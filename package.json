@@ -1,0 +1,14 @@
+{
+  "name": "code-translate-monorepo",
+  "private": true,
+  "workspaces": ["packages/lsp"],
+  "scripts": {
+    "build": "npm run build -w packages/lsp",
+    "test": "npm run test -w packages/lsp",
+    "lint": "npm run lint -w packages/lsp",
+    "format": "npm run format -w packages/lsp",
+    "format:zed": "cargo fmt --manifest-path packages/zed/Cargo.toml -- --check",
+    "check:zed": "cargo check --locked --manifest-path packages/zed/Cargo.toml",
+    "check:zed:wasm": "cargo check --locked --manifest-path packages/zed/Cargo.toml --target wasm32-wasip2"
+  }
+}

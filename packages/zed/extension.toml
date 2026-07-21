@@ -1,0 +1,7 @@
+id = "code-translate"
+name = "Code Translate"
+description = "Offline identifier translation using local dictionaries"
+version = "0.1.0"
+schema_version = 1
+authors = ["nazzeDe"]
+repository = "https://github.com/nazzeDe/code-translate-zed"
