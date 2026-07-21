@@ -131,4 +131,29 @@ mod tests {
 
         assert_eq!(action, Err("package is not published".to_string()));
     }
+
+    #[test]
+    fn manifest_registers_exactly_the_supported_languages() {
+        let manifest: toml::Value = toml::from_str(include_str!("../extension.toml")).unwrap();
+        let languages = manifest["language_servers"]["code-translate"]["languages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|language| language.as_str().unwrap())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            languages,
+            vec![
+                "Rust",
+                "Python",
+                "Go",
+                "JavaScript",
+                "TypeScript",
+                "Markdown"
+            ]
+        );
+        assert!(!languages.iter().any(|language| *language == "JSX"));
+        assert!(!languages.iter().any(|language| *language == "TSX"));
+    }
 }

@@ -9,3 +9,6 @@ repository = "https://github.com/nazzeDe/code-translate-zed"
 [[capabilities]]
 kind = "npm:install"
 package = "code-translate-lsp"
+
+[language_servers.code-translate]
+languages = ["Rust", "Python", "Go", "JavaScript", "TypeScript", "Markdown"]
