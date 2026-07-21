@@ -12,6 +12,7 @@ const execFileAsync = promisify(execFile);
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const serverPath = join(packageRoot, "dist", "server.js");
 const messageSeparator = Buffer.from("\r\n\r\n");
+const responseTimeoutMs = 10_000;
 
 function encodeMessage(message) {
   const body = Buffer.from(JSON.stringify(message), "utf8");
@@ -26,6 +27,7 @@ function createProtocolClient(server) {
   const messages = [];
   const waiters = [];
   let streamError;
+  let stderr = "";
 
   const rejectWaiters = (error) => {
     streamError = error;
@@ -81,7 +83,18 @@ function createProtocolClient(server) {
   });
 
   server.stdout.on("error", rejectWaiters);
+  server.stderr.setEncoding("utf8");
+  server.stderr.on("data", (chunk) => {
+    stderr += chunk;
+  });
   server.on("error", rejectWaiters);
+  server.on("exit", (code, signal) => {
+    rejectWaiters(
+      new Error(
+        `LSP server exited before the response (code ${code}, signal ${signal})${stderr ? `\n${stderr}` : ""}`,
+      ),
+    );
+  });
 
   return {
     notify(method, params) {
@@ -98,10 +111,7 @@ function createProtocolClient(server) {
       }
 
       return new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          reject(new Error(`Timed out waiting for response to ${method}`));
-        }, 2000);
-        waiters.push({
+        const waiter = {
           resolve: (message) => {
             clearTimeout(timeout);
             resolve(message);
@@ -110,7 +120,19 @@ function createProtocolClient(server) {
             clearTimeout(timeout);
             reject(error);
           },
-        });
+        };
+        const timeout = setTimeout(() => {
+          const index = waiters.indexOf(waiter);
+          if (index !== -1) {
+            waiters.splice(index, 1);
+          }
+          reject(
+            new Error(
+              `Timed out waiting for response to ${method}${stderr ? `\n${stderr}` : ""}`,
+            ),
+          );
+        }, responseTimeoutMs);
+        waiters.push(waiter);
       });
     },
   };

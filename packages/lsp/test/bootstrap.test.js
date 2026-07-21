@@ -7,6 +7,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  getNpmInvocation,
   getZedExtensionWorkDirectory,
   NPM_PACKAGE,
   parseArguments,
@@ -67,6 +68,37 @@ test("the command-line work directory overrides the environment", () => {
   );
 });
 
+test("launches npm through Node.js on Windows", () => {
+  assert.deepEqual(
+    getNpmInvocation(["pack"], {
+      platform: "win32",
+      env: { npm_execpath: "C:\\npm\\bin\\npm-cli.js" },
+      execPath: "C:\\Program Files\\nodejs\\node.exe",
+    }),
+    {
+      command: "C:\\Program Files\\nodejs\\node.exe",
+      args: ["C:\\npm\\bin\\npm-cli.js", "pack"],
+    },
+  );
+});
+
+test("locates the bundled npm CLI for direct Windows execution", () => {
+  assert.deepEqual(
+    getNpmInvocation(["install"], {
+      platform: "win32",
+      env: {},
+      execPath: "C:\\Program Files\\nodejs\\node.exe",
+    }),
+    {
+      command: "C:\\Program Files\\nodejs\\node.exe",
+      args: [
+        "C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js",
+        "install",
+      ],
+    },
+  );
+});
+
 test("bootstrap reuses a matching installation without replacing its server", async () => {
   const workDirectory = await mkdtemp(join(tmpdir(), "bootstrap-test-"));
   const installedPackage = join(workDirectory, "node_modules", NPM_PACKAGE);
@@ -84,13 +116,19 @@ test("bootstrap reuses a matching installation without replacing its server", as
     );
     await writeFile(serverPath, "preinstalled server", "utf8");
 
-    const result = spawnSync(
-      process.platform === "win32" ? "npm.cmd" : "npm",
-      ["run", "bootstrap", "--", "--work-dir", workDirectory],
-      { cwd: repositoryRoot, encoding: "utf8" },
-    );
+    const invocation = getNpmInvocation([
+      "run",
+      "bootstrap",
+      "--",
+      "--work-dir",
+      workDirectory,
+    ]);
+    const result = spawnSync(invocation.command, invocation.args, {
+      cwd: repositoryRoot,
+      encoding: "utf8",
+    });
 
-    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.status, 0, result.error?.stack ?? result.stderr);
     assert.ok(
       result.stdout.includes(
         `Reused ${NPM_PACKAGE}@${packageMetadata.version} in ${workDirectory}`,

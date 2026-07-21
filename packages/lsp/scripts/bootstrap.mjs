@@ -90,8 +90,35 @@ function run(command, args, options) {
   });
 }
 
-function npmCommand() {
-  return process.platform === "win32" ? "npm.cmd" : "npm";
+export function getNpmInvocation(
+  args,
+  {
+    platform = process.platform,
+    env = process.env,
+    execPath = process.execPath,
+  } = {},
+) {
+  const path = pathForPlatform(platform);
+  const npmExecPath =
+    env.npm_execpath ??
+    (platform === "win32"
+      ? path.join(
+          path.dirname(execPath),
+          "node_modules",
+          "npm",
+          "bin",
+          "npm-cli.js",
+        )
+      : undefined);
+
+  return npmExecPath
+    ? { command: execPath, args: [npmExecPath, ...args] }
+    : { command: "npm", args };
+}
+
+function runNpm(args, options) {
+  const invocation = getNpmInvocation(args);
+  return run(invocation.command, invocation.args, options);
 }
 
 async function readPackageVersion(packagePath) {
@@ -127,7 +154,7 @@ async function hasMatchingInstallation(workDirectory, version) {
 
 async function packageTarball(destination) {
   const entriesBefore = new Set(await readdir(destination));
-  await run(npmCommand(), ["pack", "--pack-destination", destination], {
+  await runNpm(["pack", "--pack-destination", destination], {
     cwd: packageRoot,
   });
   const entriesAfter = await readdir(destination);
@@ -168,8 +195,7 @@ export async function bootstrap({
     if (
       !(await hasMatchingInstallation(workDirectory, packageMetadata.version))
     ) {
-      await run(
-        npmCommand(),
+      await runNpm(
         [
           "install",
           "--prefix",
