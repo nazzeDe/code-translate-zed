@@ -2,12 +2,10 @@ import { execFile } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { getNpmInvocation } from "./bootstrap.mjs";
+
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const packageName = "code-translate-lsp";
-
-function npmCommand() {
-  return process.platform === "win32" ? "npm.cmd" : "npm";
-}
 
 function run(command, args, options) {
   return new Promise((resolve, reject) => {
@@ -38,9 +36,8 @@ function assertPackage(condition, message) {
   }
 }
 
-const packOutput = await run(npmCommand(), ["pack", "--dry-run", "--json"], {
-  cwd: packageRoot,
-});
+const npm = getNpmInvocation(["pack", "--dry-run", "--json"]);
+const packOutput = await run(npm.command, npm.args, { cwd: packageRoot });
 const metadata = getPackageMetadata(packOutput);
 assertPackage(metadata?.files, "npm pack did not return a file manifest");
 assertPackage(
