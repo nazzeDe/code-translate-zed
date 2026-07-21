@@ -10,7 +10,7 @@ import test from "node:test";
 
 const execFileAsync = promisify(execFile);
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
-const serverPath = join(packageRoot, "out", "server.js");
+const serverPath = join(packageRoot, "dist", "server.js");
 const messageSeparator = Buffer.from("\r\n\r\n");
 
 function encodeMessage(message) {

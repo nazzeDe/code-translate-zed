@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Offline identifier translation Language Server for Zed",
   "license": "MIT",
-  "main": "out/server.js",
+  "main": "dist/server.js",
   "scripts": {
     "build": "node scripts/build.mjs",
     "test": "node --test",
