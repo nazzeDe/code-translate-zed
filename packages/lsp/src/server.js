@@ -1,3 +1,5 @@
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   createConnection,
   ProposedFeatures,
@@ -6,10 +8,15 @@ import {
 } from "vscode-languageserver/node.js";
 import { TextDocument } from "vscode-languageserver-textdocument";
 
-import { provideHover } from "./hover.js";
+import { createDictionaryStore } from "./dictionary.js";
+import { createHoverProvider } from "./hover.js";
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new TextDocuments(TextDocument);
+
+const dictDir = join(dirname(fileURLToPath(import.meta.url)), "dict");
+const store = createDictionaryStore(dictDir);
+const provideHover = createHoverProvider(store);
 
 connection.onInitialize(() => ({
   capabilities: {

@@ -8,3 +8,6 @@ const outputDirectory = join(packageRoot, "out");
 await rm(outputDirectory, { recursive: true, force: true });
 await mkdir(outputDirectory, { recursive: true });
 await cp(join(packageRoot, "src"), outputDirectory, { recursive: true });
+await cp(join(packageRoot, "dict"), join(outputDirectory, "dict"), {
+  recursive: true,
+});

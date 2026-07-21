@@ -156,7 +156,7 @@ test("built stdio server returns a UTF-16 hover range", async () => {
     });
 
     assert.deepEqual(knownHover.result, {
-      contents: { kind: "markdown", value: "**hello**: 你好" },
+      contents: { kind: "markdown", value: "**hello**: interj. 喂, 嘿" },
       range: {
         start: { line: 0, character: 4 },
         end: { line: 0, character: 9 },

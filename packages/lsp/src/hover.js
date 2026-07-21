@@ -1,7 +1,5 @@
 import { MarkupKind } from "vscode-languageserver/node.js";
 
-import { lookupWord } from "./dictionary.js";
-
 function isAsciiLetter(character) {
   return (
     (character >= "a" && character <= "z") ||
@@ -38,25 +36,27 @@ function identifierAtPosition(document, position) {
   return { text: text.slice(start, end), start, end };
 }
 
-export function provideHover(document, position, lookup = lookupWord) {
-  const identifier = identifierAtPosition(document, position);
-  if (!identifier) {
-    return null;
-  }
+export function createHoverProvider(store) {
+  return async function provideHover(document, position) {
+    const identifier = identifierAtPosition(document, position);
+    if (!identifier) {
+      return null;
+    }
 
-  const translation = lookup(identifier.text);
-  if (!translation) {
-    return null;
-  }
+    const entry = await store.lookup(identifier.text);
+    if (!entry) {
+      return null;
+    }
 
-  return {
-    contents: {
-      kind: MarkupKind.Markdown,
-      value: `**${identifier.text}**: ${translation}`,
-    },
-    range: {
-      start: document.positionAt(identifier.start),
-      end: document.positionAt(identifier.end),
-    },
+    return {
+      contents: {
+        kind: MarkupKind.Markdown,
+        value: `**${identifier.text}**: ${entry.translation}`,
+      },
+      range: {
+        start: document.positionAt(identifier.start),
+        end: document.positionAt(identifier.end),
+      },
+    };
   };
 }
