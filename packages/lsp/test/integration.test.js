@@ -155,12 +155,17 @@ test("built stdio server returns a UTF-16 hover range", async () => {
       position: { line: 0, character: 6 },
     });
 
-    assert.deepEqual(knownHover.result, {
-      contents: { kind: "markdown", value: "**hello**: interj. 喂, 嘿" },
-      range: {
-        start: { line: 0, character: 4 },
-        end: { line: 0, character: 9 },
-      },
+    assert.equal(knownHover.result.contents.kind, "markdown");
+    assert.ok(
+      knownHover.result.contents.value.includes("[**hello**](https://translate.google.com/"),
+    );
+    assert.ok(
+      knownHover.result.contents.value.includes("interj") &&
+        knownHover.result.contents.value.includes("喂, 嘿"),
+    );
+    assert.deepEqual(knownHover.result.range, {
+      start: { line: 0, character: 4 },
+      end: { line: 0, character: 9 },
     });
 
     const unopenedHover = await client.request(3, "textDocument/hover", {

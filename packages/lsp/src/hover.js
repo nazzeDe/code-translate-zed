@@ -109,6 +109,49 @@ function identifierAtPosition(document, position) {
   return { text: text.slice(start, end), start, end };
 }
 
+const MARKDOWN_ESCAPE_RE = /[\\`*_{}\[\]()#+.!|~-]/g;
+
+/**
+ * Escape text for safe inclusion in Markdown content.
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+function escapeMarkdown(text) {
+  return text.replace(MARKDOWN_ESCAPE_RE, "\\$&");
+}
+
+/**
+ * Render a hover value for the matched results.
+ *
+ * Each word links to Google Translate. Translation text is Markdown-escaped.
+ * Intentional dictionary line breaks are preserved.
+ *
+ * @param {{ word: string, entry: object }[]} results
+ * @returns {string}
+ */
+function renderHoverValue(results) {
+  const blocks = results.map(({ word, entry }) => {
+    const escapedWord = escapeMarkdown(word);
+    const encodedWord = encodeURIComponent(word);
+    const gtLink = `https://translate.google.com/?sl=en&tl=zh-CN&text=${encodedWord}&op=translate`;
+
+    let line = `[**${escapedWord}**](${gtLink})`;
+
+    if (entry.phonetic) {
+      line += ` ${escapeMarkdown(entry.phonetic)}`;
+    }
+
+    if (entry.translation) {
+      line += `\n${escapeMarkdown(entry.translation)}`;
+    }
+
+    return line;
+  });
+
+  return blocks.join("\n\n---\n\n");
+}
+
 export function createHoverProvider(store) {
   return async function provideHover(document, position) {
     const identifier = identifierAtPosition(document, position);
@@ -133,9 +176,7 @@ export function createHoverProvider(store) {
       return null;
     }
 
-    const value = results
-      .map((r) => `**${r.word}**: ${r.entry.translation}`)
-      .join("\n\n");
+    const value = renderHoverValue(results);
 
     return {
       contents: {
