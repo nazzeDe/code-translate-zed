@@ -116,3 +116,46 @@ test("splitIdentifier deduplicates while preserving first occurrence order", () 
 test("splitIdentifier handles mixed case acronym followed by lowercase", () => {
   assert.deepEqual(splitIdentifier("getUserID"), ["get", "user", "id"]);
 });
+
+test("partial match: unknown words are omitted, only matched translations shown", async () => {
+  const document = createDocument("unknownWord_cat");
+  const provideHover = createProvider(async (identifier) => {
+    if (identifier === "cat") return { translation: "猫" };
+    return null;
+  });
+  const hover = await provideHover(document, { line: 0, character: 5 });
+
+  assert.equal(hover.contents.value, "**cat**: 猫");
+  assert.deepEqual(hover.range, {
+    start: { line: 0, character: 0 },
+    end: { line: 0, character: 15 },
+  });
+});
+
+test("all words unknown returns null", async () => {
+  const document = createDocument("unknown_xyz");
+  const provideHover = createProvider(async () => null);
+  const hover = await provideHover(document, { line: 0, character: 5 });
+  assert.equal(hover, null);
+});
+
+test("pure number identifier returns null", async () => {
+  const document = createDocument("123");
+  // Even if the store could return something, the identifier has no
+  // letters so it should produce no hover.
+  const provideHover = createProvider(async () => ({
+    translation: "should not appear",
+  }));
+  const hover = await provideHover(document, { line: 0, character: 1 });
+  assert.equal(hover, null);
+});
+
+test("hover output contains no Baidu links", async () => {
+  const document = createDocument("hello");
+  const provideHover = createProvider(async () => ({
+    translation: "你好",
+  }));
+  const hover = await provideHover(document, { line: 0, character: 1 });
+  assert.ok(!hover.contents.value.includes("baidu"), "should not contain baidu");
+  assert.ok(!hover.contents.value.includes("Baidu"), "should not contain Baidu");
+});
