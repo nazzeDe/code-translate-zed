@@ -3,3 +3,4 @@ node_modules/
 dist/
 out/
 .pi-subagents/
+packages/zed/extension.wasm
