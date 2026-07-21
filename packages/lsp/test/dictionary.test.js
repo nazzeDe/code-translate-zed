@@ -53,68 +53,167 @@ test("createDictionaryStore lookups a word from a prefix file", async (t) => {
 });
 
 test("words shorter than 2 ASCII letters return null without touching fs", async () => {
-  const store = createDictionaryStore("/nonexistent");
+  // Using a reader that throws to prove fs is never called.
+  const store = createDictionaryStore("/nonexistent", {
+    readFile: () => {
+      throw new Error("fs should not be called");
+    },
+  });
   assert.equal(await store.lookup("a"), null);
   assert.equal(await store.lookup(""), null);
   assert.equal(await store.lookup("x"), null);
 });
 
 test("non-ASCII prefix returns null without touching fs", async () => {
-  const store = createDictionaryStore("/nonexistent");
+  const store = createDictionaryStore("/nonexistent", {
+    readFile: () => {
+      throw new Error("fs should not be called");
+    },
+  });
   assert.equal(await store.lookup("über"), null);
   assert.equal(await store.lookup("éclair"), null);
 });
 
-test("lazy loading: prefix file not read until first lookup", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "dict-lazy-"));
-  try {
-    await writeFile(
-      join(dir, "te.json"),
-      JSON.stringify({ test: "测试" }),
-      "utf8",
-    );
+test("lazy loading: prefix file not read until first lookup, read only once", async () => {
+  const calls = [];
+  const store = createDictionaryStore("/dummy", {
+    readFile: async (path) => {
+      calls.push(path);
+      if (path === "/dummy/te.json") {
+        return JSON.stringify({ test: "测试" });
+      }
+      throw new Error(`unexpected path: ${path}`);
+    },
+  });
 
-    const store = createDictionaryStore(dir);
-    // No lookup yet — file should not have been read
-    // First lookup triggers the load
-    let result = await store.lookup("test");
-    assert.deepEqual(result, { translation: "测试" });
+  // No lookups yet — reader should not have been called.
+  assert.deepEqual(calls, []);
 
-    // Second lookup uses cache (no re-read)
-    result = await store.lookup("test");
-    assert.deepEqual(result, { translation: "测试" });
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
+  // First lookup triggers the load.
+  let result = await store.lookup("test");
+  assert.deepEqual(result, { translation: "测试" });
+  assert.equal(calls.length, 1);
+
+  // Second lookup uses cache (no re-read).
+  result = await store.lookup("test");
+  assert.deepEqual(result, { translation: "测试" });
+  assert.equal(calls.length, 1, "second lookup should not call reader");
 });
 
-test("LRU cache evicts least-recently-used prefix", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "dict-lru-"));
-  try {
-    // Create 3 prefix files
-    for (const prefix of ["aa", "bb", "cc"]) {
-      await writeFile(
-        join(dir, `${prefix}.json`),
-        JSON.stringify({ [`${prefix}word`]: `${prefix}翻译` }),
-        "utf8",
-      );
-    }
+test("LRU eviction: evicted prefix is reloaded from reader on next access", async () => {
+  const calls = [];
+  const data = {
+    "/d/aa.json": JSON.stringify({ aaword: "aa翻译" }),
+    "/d/bb.json": JSON.stringify({ bbword: "bb翻译" }),
+    "/d/cc.json": JSON.stringify({ ccword: "cc翻译" }),
+  };
 
-    // Cache size of 2
-    const store = createDictionaryStore(dir, { maxSize: 2 });
+  const store = createDictionaryStore("/d", {
+    maxSize: 2,
+    readFile: async (path) => {
+      calls.push(path);
+      if (data[path] !== undefined) return data[path];
+      throw new Error(`unexpected path: ${path}`);
+    },
+  });
 
-    // Load aa and bb
-    await store.lookup("aaword");
-    await store.lookup("bbword");
+  // Load aa and bb.
+  await store.lookup("aaword");
+  await store.lookup("bbword");
+  assert.deepEqual(calls, ["/d/aa.json", "/d/bb.json"]);
 
-    // Load cc — should evict aa (least recently used)
-    await store.lookup("ccword");
+  // Access aa again so bb becomes LRU.
+  await store.lookup("aaword");
+  assert.equal(calls.length, 2, "aa should be cached, no re-read");
 
-    // aa should still work (reloads from disk, not cached)
-    // This verifies that eviction doesn't break lookups
-    const result = await store.lookup("aaword");
-    assert.deepEqual(result, { translation: "aa翻译" });
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
+  // Load cc — evicts bb (least recently used).
+  await store.lookup("ccword");
+  assert.deepEqual(calls, ["/d/aa.json", "/d/bb.json", "/d/cc.json"]);
+
+  // bb should reload from reader (was evicted).
+  await store.lookup("bbword");
+  assert.deepEqual(calls, [
+    "/d/aa.json",
+    "/d/bb.json",
+    "/d/cc.json",
+    "/d/bb.json",
+  ], "evicted bb should be reloaded");
+});
+
+test("cache capacity respects maxSize", async () => {
+  // Create a store with maxSize=1 and verify only 1 entry stays cached.
+  const calls = [];
+  const store = createDictionaryStore("/d", {
+    maxSize: 1,
+    readFile: async (path) => {
+      calls.push(path);
+      if (path === "/d/aa.json") return JSON.stringify({ aaword: "aa" });
+      if (path === "/d/bb.json") return JSON.stringify({ bbword: "bb" });
+      throw new Error(`unexpected: ${path}`);
+    },
+  });
+
+  await store.lookup("aaword");
+  assert.equal(calls.length, 1);
+
+  await store.lookup("bbword"); // evicts aa
+  assert.equal(calls.length, 2);
+
+  // aa should reload since it was evicted.
+  await store.lookup("aaword");
+  assert.equal(calls.length, 3);
+});
+
+test("missing file (ENOENT) returns null and is not cached", async () => {
+  const calls = [];
+  const store = createDictionaryStore("/d", {
+    readFile: async (path) => {
+      calls.push(path);
+      const err = new Error("ENOENT: no such file");
+      err.code = "ENOENT";
+      throw err;
+    },
+  });
+
+  // First attempt: null, reader called.
+  assert.equal(await store.lookup("hello"), null);
+  assert.equal(calls.length, 1);
+
+  // Second attempt: still null, reader called again (not cached).
+  assert.equal(await store.lookup("hello"), null);
+  assert.equal(calls.length, 2, "failed loads should not be cached");
+});
+
+test("invalid JSON returns null and is not cached", async () => {
+  const calls = [];
+  const store = createDictionaryStore("/d", {
+    readFile: async (path) => {
+      calls.push(path);
+      return "not valid json {{{";
+    },
+  });
+
+  assert.equal(await store.lookup("hello"), null);
+  assert.equal(calls.length, 1);
+
+  assert.equal(await store.lookup("hello"), null);
+  assert.equal(calls.length, 2, "invalid JSON should not be cached");
+});
+
+test("filesystem error returns null and is not cached", async () => {
+  const calls = [];
+  const store = createDictionaryStore("/d", {
+    readFile: async (path) => {
+      calls.push(path);
+      const err = new Error("EACCES: permission denied");
+      err.code = "EACCES";
+      throw err;
+    },
+  });
+
+  assert.equal(await store.lookup("hello"), null);
+  assert.equal(calls.length, 1);
+
+  assert.equal(await store.lookup("hello"), null);
+  assert.equal(calls.length, 2, "fs errors should not be cached");
 });

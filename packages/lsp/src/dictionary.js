@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile as fsReadFile } from "node:fs/promises";
 import { join } from "node:path";
 
 // Map insertion order provides the LRU ordering without another dependency.
@@ -56,14 +56,20 @@ const DEFAULT_MAX_SIZE = 50;
 /**
  * Create a dictionary store backed by two-letter-prefix JSON files.
  *
- * @param {string}  dictDir          Directory containing prefix JSON files.
+ * @param {string}  dictDir            Directory containing prefix JSON files.
  * @param {object}  [options]
- * @param {number}  [options.maxSize] Max cached prefix files (default 50).
+ * @param {number}  [options.maxSize]   Max cached prefix files (default 50).
+ * @param {function} [options.readFile]  Replaceable file reader (default: fs.promises.readFile).
  * @returns {{ lookup: (word: string) => Promise<object|null> }}
  */
 export function createDictionaryStore(dictDir, options = {}) {
   const maxSize = options.maxSize ?? DEFAULT_MAX_SIZE;
+  const readFile = options.readFile ?? defaultReadFile;
   const cache = new LRUCache(maxSize);
+
+  async function defaultReadFile(filePath) {
+    return fsReadFile(filePath, "utf8");
+  }
 
   return {
     async lookup(word) {
@@ -76,12 +82,13 @@ export function createDictionaryStore(dictDir, options = {}) {
 
       let prefixData = cache.get(prefix);
       if (prefixData === undefined) {
+        const filePath = join(dictDir, `${prefix}.json`);
         try {
-          const raw = await readFile(join(dictDir, `${prefix}.json`), "utf8");
+          const raw = await readFile(filePath);
           prefixData = JSON.parse(raw);
           cache.set(prefix, prefixData);
         } catch {
-          // Issue #7 adds diagnostics and more precise failure handling.
+          // Do not cache failures. Return null without leaking paths.
           return null;
         }
       }
