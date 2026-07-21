@@ -8,6 +8,7 @@
   "main": "dist/server.js",
   "scripts": {
     "build": "node scripts/build.mjs",
+    "bootstrap": "node scripts/bootstrap.mjs",
     "test": "node --test",
     "lint": "eslint .",
     "format": "prettier --check ."

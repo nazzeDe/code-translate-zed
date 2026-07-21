@@ -4,6 +4,7 @@
   "workspaces": ["packages/lsp"],
   "scripts": {
     "build": "npm run build -w packages/lsp",
+    "bootstrap": "npm run bootstrap -w packages/lsp",
     "test": "npm run test -w packages/lsp",
     "lint": "npm run lint -w packages/lsp",
     "format": "npm run format -w packages/lsp",

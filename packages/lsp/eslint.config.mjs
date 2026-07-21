@@ -7,6 +7,7 @@ export default [
       sourceType: "module",
       globals: {
         console: "readonly",
+        process: "readonly",
       },
     },
     rules: {
