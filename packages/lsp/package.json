@@ -1,7 +1,6 @@
 {
   "name": "code-translate-lsp",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "Offline identifier translation Language Server for Zed",
   "license": "MIT",

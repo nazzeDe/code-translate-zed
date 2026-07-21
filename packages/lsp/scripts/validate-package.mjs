@@ -55,6 +55,7 @@ assertPackage(
   fileSet.has("package.json"),
   "npm package is missing package.json",
 );
+assertPackage(fileSet.has("README.md"), "npm package is missing README.md");
 assertPackage(
   fileSet.has("dist/server.js"),
   "npm package is missing dist/server.js",
