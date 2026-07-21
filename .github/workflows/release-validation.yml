@@ -1,0 +1,59 @@
+name: Release validation
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Zed UI Hover coexistence and persistent-log review remain manual; see
+# MANUAL_VALIDATION.md. They are intentionally not represented as CI results.
+
+jobs:
+  node-validation:
+    name: Node validation (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Validate Node package
+        run: npm run validate:node
+      - name: Validate release package contents
+        run: npm run validate:package
+      - name: Validate bootstrap paths
+        run: npm run validate:bootstrap
+
+  rust-validation:
+    name: Rust validation (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip2
+          components: rustfmt
+      - name: Validate formatting
+        run: cargo fmt --manifest-path packages/zed/Cargo.toml -- --check
+      - name: Validate native extension
+        run: cargo check --locked --manifest-path packages/zed/Cargo.toml
+      - name: Validate manifest structure
+        run: cargo test --locked --manifest-path packages/zed/Cargo.toml manifest_
+      - name: Validate wasm extension
+        run: cargo check --locked --manifest-path packages/zed/Cargo.toml --target wasm32-wasip2

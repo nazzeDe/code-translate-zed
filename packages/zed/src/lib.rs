@@ -156,4 +156,17 @@ mod tests {
         assert!(!languages.iter().any(|language| *language == "JSX"));
         assert!(!languages.iter().any(|language| *language == "TSX"));
     }
+
+    #[test]
+    fn manifest_declares_the_immutable_id_and_npm_capability() {
+        let manifest: toml::Value = toml::from_str(include_str!("../extension.toml")).unwrap();
+        let capabilities = manifest["capabilities"].as_array().unwrap();
+        let npm_capability = capabilities.iter().find(|capability| {
+            capability["kind"].as_str() == Some("npm:install")
+                && capability["package"].as_str() == Some(NPM_PACKAGE)
+        });
+
+        assert_eq!(manifest["id"].as_str(), Some("code-translate"));
+        assert!(npm_capability.is_some());
+    }
 }

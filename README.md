@@ -117,6 +117,12 @@ Use `zed: open log` from the command palette while validating the development ex
 
 ## Release Workflow
 
+Run the complete automated release gate from the repository root:
+
+```sh
+npm run validate
+```
+
 Release validation must pass from a clean checkout before publication:
 
 1. Run the Node tests, lint, production build, and format checks.
@@ -125,7 +131,7 @@ Release validation must pass from a clean checkout before publication:
 4. Confirm the package contains the built `dist/server.js`, exactly 674 dictionary files, and the required license and provenance notices.
 5. Complete the manual Zed Hover and coexistence checklist separately.
 
-The npm package and Zed extension are released in separate steps. After the package is genuinely ready for publication and its package metadata permits publication, publish the language server from the workspace:
+The npm package and Zed extension are released in separate steps. `packages/lsp` remains marked `private` while the manual Zed check is pending. Remove that flag only after all automated and manual release checks pass and publication is explicitly approved, then publish the language server from the workspace:
 
 ```sh
 npm publish --workspace packages/lsp

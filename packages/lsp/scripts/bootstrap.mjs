@@ -162,7 +162,6 @@ export async function bootstrap({
   );
 
   try {
-    await run(npmCommand(), ["run", "build"], { cwd: packageRoot });
     const tarball = await packageTarball(temporaryDirectory);
     await mkdir(workDirectory, { recursive: true });
 

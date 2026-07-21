@@ -5,13 +5,26 @@
   "type": "module",
   "description": "Offline identifier translation Language Server for Zed",
   "license": "MIT",
+  "author": "nazzeDe",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nazzeDe/code-translate-zed.git",
+    "directory": "packages/lsp"
+  },
   "main": "dist/server.js",
+  "files": [
+    "dist",
+    "LICENSE",
+    "THIRD_PARTY_LICENSES.md"
+  ],
   "scripts": {
     "build": "node scripts/build.mjs",
     "bootstrap": "node scripts/bootstrap.mjs",
+    "prepack": "npm run build",
     "test": "node --test",
     "lint": "eslint .",
-    "format": "prettier --check ."
+    "format": "prettier --check .",
+    "validate:package": "node scripts/validate-package.mjs"
   },
   "devDependencies": {
     "eslint": "^9.39.5",
