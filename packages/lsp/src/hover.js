@@ -9,33 +9,42 @@ function isAsciiLetter(character) {
   );
 }
 
-function wordAtPosition(document, position) {
+function isIdentifierCharacter(character) {
+  return (
+    isAsciiLetter(character) ||
+    (character >= "0" && character <= "9") ||
+    character === "_" ||
+    character === "-"
+  );
+}
+
+function identifierAtPosition(document, position) {
   const text = document.getText();
   const offset = document.offsetAt(position);
-  if (offset >= text.length || !isAsciiLetter(text[offset])) {
+  if (offset >= text.length || !isIdentifierCharacter(text[offset])) {
     return null;
   }
 
   let start = offset;
-  while (start > 0 && isAsciiLetter(text[start - 1])) {
+  while (start > 0 && isIdentifierCharacter(text[start - 1])) {
     start -= 1;
   }
 
   let end = offset + 1;
-  while (end < text.length && isAsciiLetter(text[end])) {
+  while (end < text.length && isIdentifierCharacter(text[end])) {
     end += 1;
   }
 
   return { text: text.slice(start, end), start, end };
 }
 
-export function provideHover(document, position) {
-  const word = wordAtPosition(document, position);
-  if (!word) {
+export function provideHover(document, position, lookup = lookupWord) {
+  const identifier = identifierAtPosition(document, position);
+  if (!identifier) {
     return null;
   }
 
-  const translation = lookupWord(word.text);
+  const translation = lookup(identifier.text);
   if (!translation) {
     return null;
   }
@@ -43,11 +52,11 @@ export function provideHover(document, position) {
   return {
     contents: {
       kind: MarkupKind.Markdown,
-      value: `**${word.text}**: ${translation}`,
+      value: `**${identifier.text}**: ${translation}`,
     },
     range: {
-      start: document.positionAt(word.start),
-      end: document.positionAt(word.end),
+      start: document.positionAt(identifier.start),
+      end: document.positionAt(identifier.end),
     },
   };
 }

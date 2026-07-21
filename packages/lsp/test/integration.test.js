@@ -116,7 +116,7 @@ function createProtocolClient(server) {
   };
 }
 
-test("built stdio server initializes and serves the first offline hover", async () => {
+test("built stdio server returns a UTF-16 hover range", async () => {
   await execFileAsync(process.execPath, ["scripts/build.mjs"], {
     cwd: packageRoot,
   });
@@ -146,20 +146,20 @@ test("built stdio server initializes and serves the first offline hover", async 
         uri,
         languageId: "plaintext",
         version: 1,
-        text: "hello ",
+        text: '😀 "hello",',
       },
     });
 
     const knownHover = await client.request(2, "textDocument/hover", {
       textDocument: { uri },
-      position: { line: 0, character: 1 },
+      position: { line: 0, character: 6 },
     });
 
     assert.deepEqual(knownHover.result, {
       contents: { kind: "markdown", value: "**hello**: 你好" },
       range: {
-        start: { line: 0, character: 0 },
-        end: { line: 0, character: 5 },
+        start: { line: 0, character: 4 },
+        end: { line: 0, character: 9 },
       },
     });
 
@@ -171,7 +171,7 @@ test("built stdio server initializes and serves the first offline hover", async 
 
     const emptyPositionHover = await client.request(4, "textDocument/hover", {
       textDocument: { uri },
-      position: { line: 0, character: 6 },
+      position: { line: 0, character: 9 },
     });
     assert.equal(emptyPositionHover.result, null);
   } finally {
